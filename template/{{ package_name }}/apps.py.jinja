@@ -1,0 +1,11 @@
+"""Django application definition."""
+
+from django.apps import AppConfig
+from django.utils.translation import gettext_lazy as _
+
+
+class {{ app_config_class }}(AppConfig):
+    name = "{{ package_name }}"
+    label = "{{ django_app_label }}"
+    verbose_name = _("{{ app_verbose_name }}")
+    default_auto_field = "django.db.models.BigAutoField"

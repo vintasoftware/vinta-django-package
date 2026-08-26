@@ -1,0 +1,105 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FORCE_COLOR: "1"
+
+permissions:
+  contents: read
+
+jobs:
+  # Generate a project for each interesting combination of answers and run the checks
+  # the generated project ships with.  A template that produces a red CI is a bug.
+  generate:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Defaults
+            data: ""
+          - name: Django 6.0 on Python 3.12
+            data: >-
+              -d python_min=3.12 -d django_min=6.0
+          - name: No PyPI publishing, no Django main
+            data: >-
+              -d publish_to_pypi=false -d test_django_main=false
+          - name: BSD 3-Clause
+            data: >-
+              -d license=BSD-3-Clause -d project_name="Vinta Django Widgets"
+          - name: Proprietary, renamed package
+            data: >-
+              -d license=Proprietary -d project_name="Acme Billing"
+              -d package_name=acme_billing -d django_app_label=billing
+              -d github_org=acme -d author_name="Acme Inc"
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Generate the project
+        run: >-
+          uvx copier copy --trust --defaults --vcs-ref=HEAD
+          ${{ matrix.data }} . "${RUNNER_TEMP}/generated"
+
+      - name: Show what was generated
+        run: find "${RUNNER_TEMP}/generated" -type f -not -path '*/.git/*' | sort
+
+      - name: Install the generated project
+        working-directory: ${{ runner.temp }}/generated
+        run: uv sync --all-groups
+
+      - name: Lint and format
+        working-directory: ${{ runner.temp }}/generated
+        run: |
+          uv run ruff check --output-format=github .
+          uv run ruff format --check .
+
+      - name: Type check
+        working-directory: ${{ runner.temp }}/generated
+        run: uv run mypy
+
+      - name: Check for missing migrations
+        working-directory: ${{ runner.temp }}/generated
+        run: uv run python -m tests.manage makemigrations --check --dry-run
+
+      - name: Run the test suite
+        working-directory: ${{ runner.temp }}/generated
+        run: uv run pytest
+
+      - name: Build the distribution
+        working-directory: ${{ runner.temp }}/generated
+        run: |
+          uv build
+          uvx twine check --strict dist/*
+
+      - name: Check that the workflows are valid YAML
+        working-directory: ${{ runner.temp }}/generated
+        run: >-
+          uv run python -c "import pathlib, yaml;
+          [yaml.safe_load(p.read_text()) for p in
+          pathlib.Path('.github/workflows').iterdir()]"
+
+  pre-commit:
+    name: pre-commit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - uses: pre-commit/action@v3.0.1

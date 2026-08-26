@@ -1,0 +1,176 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "{{ distribution_name }}"
+version = "{{ initial_version }}"
+description = "{{ project_description }}"
+readme = "README.md"
+requires-python = ">={{ python_min }}"
+license = "{{ license_expression }}"
+license-files = ["LICENSE"]
+authors = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+maintainers = [{ name = "{{ author_name }}", email = "{{ author_email }}" }]
+keywords = [
+{%- for keyword in keywords.split(",") | map("trim") | select() %}
+    "{{ keyword }}",
+{%- endfor %}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Web Environment",
+    "Framework :: Django",
+{%- for version in django_versions %}
+    "Framework :: Django :: {{ version }}",
+{%- endfor %}
+    "Intended Audience :: Developers",
+    "{{ license_classifier }}",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+{%- for version in python_versions %}
+    "Programming Language :: Python :: {{ version }}",
+{%- endfor %}
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = ["django>={{ django_min }}"]
+
+[project.urls]
+Homepage = "https://github.com/{{ github_org }}/{{ github_repo }}"
+Documentation = "https://github.com/{{ github_org }}/{{ github_repo }}#readme"
+Repository = "https://github.com/{{ github_org }}/{{ github_repo }}"
+Issues = "https://github.com/{{ github_org }}/{{ github_repo }}/issues"
+Changelog = "https://github.com/{{ github_org }}/{{ github_repo }}/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "django-stubs[compatible-mypy]>={{ django_min }}",
+    "mypy>=1.15",
+    "pre-commit>=4.1",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-django>=4.10",
+    "ruff>=0.9",
+    "tox>=4.24",
+    "tox-uv>=1.25",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["{{ package_name }}"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/{{ package_name }}",
+    "/tests",
+    "/README.md",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/tox.ini",
+]
+
+# ---------------------------------------------------------------- ruff
+[tool.ruff]
+line-length = 99
+target-version = "py{{ python_min | replace('.', '') }}"
+src = ["{{ package_name }}", "tests"]
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "A",    # flake8-builtins
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "DJ",   # flake8-django
+    "DTZ",  # flake8-datetimez
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "FA",   # flake8-future-annotations
+    "I",    # isort
+    "N",    # pep8-naming
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "PTH",  # flake8-use-pathlib
+    "RET",  # flake8-return
+    "RUF",  # ruff-specific
+    "SIM",  # flake8-simplify
+    "T20",  # flake8-print
+    "TC",   # flake8-type-checking
+    "TID",  # flake8-tidy-imports
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
+]
+ignore = [
+    "RUF012", # mutable class attrs need ClassVar - noisy with Django Meta
+    "N818",   # exceptions read as conditions here, the way Django's own do
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["DJ008"]
+"{{ package_name }}/migrations/*" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["{{ package_name }}"]
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "parents"
+
+[tool.ruff.format]
+docstring-code-format = true
+
+# ---------------------------------------------------------------- mypy
+[tool.mypy]
+# No python_version pin: django-stubs' own stubs use 3.11+ constructs, and pinning an
+# older version silently degrades TextChoices to a plain tuple.
+files = ["{{ package_name }}", "tests"]
+strict = true
+plugins = ["mypy_django_plugin.main"]
+warn_unreachable = true
+show_error_codes = true
+exclude = ['/migrations/']
+
+[[tool.mypy.overrides]]
+# ModelAdmin and TabularInline are not subscriptable at runtime, and the checker-only
+# alias dance those would need buys nothing here: every method is annotated already.
+module = ["{{ package_name }}.admin"]
+disable_error_code = ["type-arg"]
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
+disallow_untyped_calls = false
+disallow_incomplete_defs = false
+warn_unreachable = false
+warn_return_any = false
+
+[tool.django-stubs]
+django_settings_module = "tests.settings"
+
+# ---------------------------------------------------------------- pytest
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "tests.settings"
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+filterwarnings = ["error"]
+
+# ---------------------------------------------------------------- coverage
+[tool.coverage.run]
+# source_pkgs, not a path: under tox the package is measured where the wheel installed it.
+source_pkgs = ["{{ package_name }}"]
+branch = true
+omit = ["*/migrations/*"]
+
+[tool.coverage.paths]
+source = ["{{ package_name }}", "*/site-packages/{{ package_name }}"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@overload",
+]

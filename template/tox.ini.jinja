@@ -1,0 +1,77 @@
+{%- macro dj_next(version) -%}
+{%- set parts = version.split(".") -%}
+{%- if parts[1] == "2" %}{{ parts[0] | int + 1 }}.0{% else %}{{ parts[0] }}.{{ parts[1] | int + 1 }}{% endif %}
+{%- endmacro -%}
+{%- macro tox_dj(version) %}dj{{ version | replace(".", "") }}{% endmacro -%}
+{%- macro tox_py(version) %}py{{ version | replace(".", "") }}{% endmacro -%}
+# The matrix is spelled out as explicit factor pairs rather than a full product,
+# because each Django release supports a different span of interpreters.
+[tox]
+requires =
+    tox>=4.24
+    tox-uv>=1.25
+env_list =
+{%- for python in python_versions %}
+{%- for django in django_versions %}
+{%- if python in python_support[django] %}
+    {{ tox_py(python) }}-{{ tox_dj(django) }}
+{%- endif %}
+{%- endfor %}
+{%- endfor %}
+{%- if test_django_main %}
+    {{ tox_py(python_latest) }}-djmain
+{%- endif %}
+    lint
+    types
+skip_missing_interpreters = true
+
+[testenv]
+runner = uv-venv-lock-runner
+description = Run the test suite on this interpreter against the pinned Django
+package = wheel
+wheel_build_env = .pkg
+dependency_groups = dev
+deps =
+{%- for django in django_versions %}
+    {{ tox_dj(django) }}: django>={{ django }},<{{ dj_next(django) }}
+{%- endfor %}
+{%- if test_django_main %}
+    djmain: https://github.com/django/django/archive/main.tar.gz
+{%- endif %}
+{%- if test_django_main %}
+# Django's main branch breaks for reasons that are not this project's fault, so those
+# environments report without failing the run.
+ignore_outcome =
+    djmain: true
+{%- endif %}
+set_env =
+    PYTHONDEVMODE = 1
+commands =
+    pytest {posargs:--cov --cov-report=term-missing}
+
+[testenv:lint]
+runner = uv-venv-lock-runner
+description = Check formatting and lint rules
+dependency_groups = dev
+skip_install = true
+commands =
+    ruff check .
+    ruff format --check .
+
+[testenv:types]
+runner = uv-venv-lock-runner
+description = Type check with mypy and django-stubs
+dependency_groups = dev
+commands =
+    mypy
+
+[testenv:build]
+runner = uv-venv-lock-runner
+description = Build the sdist and wheel and check the metadata
+skip_install = true
+deps =
+    build
+    twine
+commands =
+    python -m build
+    twine check dist/*

@@ -1,0 +1,86 @@
+# {{ project_name }}
+
+{{ project_description }}
+{% if publish_to_pypi %}
+[![PyPI](https://img.shields.io/pypi/v/{{ distribution_name }}.svg)](https://pypi.org/project/{{ distribution_name }}/)
+{%- endif %}
+[![CI](https://github.com/{{ github_org }}/{{ github_repo }}/actions/workflows/ci.yml/badge.svg)](https://github.com/{{ github_org }}/{{ github_repo }}/actions/workflows/ci.yml)
+
+Supports Python {{ python_versions | join(", ") }} and Django {{ django_versions | join(", ") }}.
+
+
+## Installation
+
+```bash
+pip install {{ distribution_name }}
+```
+
+Then add the app to `INSTALLED_APPS`:
+
+```python
+INSTALLED_APPS = [
+    ...,
+    "{{ package_name }}",
+]
+```
+
+
+## Usage
+
+> Describe the public API here.
+
+
+## Development
+
+The project uses [uv](https://docs.astral.sh/uv/) for dependency management and
+[tox](https://tox.wiki/) to run the suite across the support matrix.
+
+```bash
+uv sync --all-groups
+uv run pre-commit install --install-hooks --hook-type commit-msg
+uv run pytest
+```
+
+Useful commands:
+
+| Command | What it does |
+| --- | --- |
+| `uv run pytest` | Run the test suite on the current interpreter |
+| `uv run tox` | Run it on every supported Python and Django |
+| `uv run tox -e lint` | Check formatting and lint rules |
+| `uv run tox -e types` | Type check with mypy and django-stubs |
+| `uv run tox -e build` | Build the sdist and wheel and check the metadata |
+| `uv run python -m tests.manage makemigrations` | Generate migrations for the app |
+
+{% if publish_to_pypi -%}
+
+## Releasing
+
+1. Bump the version in `pyproject.toml` and move the `Unreleased` section of
+   `CHANGELOG.md` under the new number.
+2. Tag the commit as `vX.Y.Z` and publish a GitHub release.
+3. The `publish.yml` workflow builds, verifies that the tag matches the version,
+   uploads to PyPI through trusted publishing, and attaches Sigstore signatures.
+
+To rehearse a release, run the workflow manually with the `testpypi` target.
+
+{% endif -%}
+
+## Staying up to date with the template
+
+This project was generated from
+[vinta-django-package](https://github.com/{{ github_org }}/vinta-django-package).
+To pull in later improvements to the tooling:
+
+```bash
+uvx copier update --trust
+```
+
+
+## License
+
+{% if license == "Proprietary" -%}
+Proprietary. Copyright (c) {{ copyright_year }} {{ author_name }}. All rights reserved.
+{%- else -%}
+{{ license }}. See [LICENSE](LICENSE).
+{%- endif %}

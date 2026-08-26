@@ -1,0 +1,239 @@
+# vinta-django-package
+#
+# Copier template for a reusable Django app packaged for PyPI, with the tooling
+# Vinta ships on every library: uv, ruff, mypy + django-stubs, pytest-django, tox
+# across the supported Python/Django matrix, pre-commit, and GitHub Actions.
+#
+#     uvx copier copy gh:vintasoftware/vinta-django-package my-new-package
+
+_min_copier_version: "9.0.0"
+_subdirectory: template
+_answers_file: .copier-answers.yml
+
+_exclude:
+  - "copier.yml"
+  - "copier.yaml"
+  - "~*"
+  - "*.py[co]"
+  - "__pycache__"
+  - ".git"
+  - ".DS_Store"
+  - ".svn"
+
+_message_after_copy: |
+  Your package is ready in {{ _copier_conf.dst_path }}.
+
+  Next steps:
+
+      cd {{ _copier_conf.dst_path }}
+      git init && git branch -M main
+      uv sync --all-groups
+      uv run pre-commit install --install-hooks --hook-type commit-msg
+      uv run pytest
+
+  Then create https://github.com/{{ github_org }}/{{ github_repo }} and push.
+  {% if publish_to_pypi %}
+  Publishing uses PyPI trusted publishing, so no API token is stored in the
+  repository.  Register the publisher for "{{ distribution_name }}" at
+  https://pypi.org/manage/account/publishing/ with the workflow "publish.yml"
+  and the environments "pypi" and "testpypi" before the first release.
+  {% endif %}
+
+_message_after_update: |
+  Updated {{ _copier_conf.dst_path }} to {{ _copier_answers._commit }}.
+  Re-run `uv lock` and `uv run pre-commit autoupdate` if the tooling moved.
+
+
+# Generate the lockfile the CI workflow and the pre-commit hooks both expect.  Guarded
+# so a machine without uv still gets a usable project instead of a failed generation.
+_tasks:
+  - command: >-
+      command -v uv >/dev/null 2>&1 && uv lock
+      || echo "uv is not installed: run 'uv lock' before pushing."
+    when: "{{ _copier_conf.os != 'windows' }}"
+
+
+# ---------------------------------------------------------------- identity
+
+project_name:
+  type: str
+  help: Human readable project name
+  default: Django Example App
+  validator: "{% if not project_name.strip() %}The project name cannot be empty.{% endif %}"
+
+distribution_name:
+  type: str
+  help: PyPI distribution name (the name people `pip install`)
+  default: "{{ project_name|lower|replace(' ', '-')|replace('_', '-') }}"
+  validator: >-
+    {% if not distribution_name|regex_search('^[a-z0-9]+([._-][a-z0-9]+)*$') %}
+    Must be lowercase and normalised, e.g. vinta-django-cascading-settings.
+    {% endif %}
+
+package_name:
+  type: str
+  help: Python package name (the name people `import`)
+  default: "{{ distribution_name|replace('-', '_')|replace('.', '_') }}"
+  validator: >-
+    {% if not package_name|regex_search('^[a-z_][a-z0-9_]*$') %}
+    Must be a valid lowercase Python identifier, e.g. vinta_cascading_settings.
+    {% endif %}
+
+django_app_label:
+  type: str
+  help: Django app label (must be unique across INSTALLED_APPS)
+  default: "{{ package_name }}"
+  validator: >-
+    {% if not django_app_label|regex_search('^[a-z_][a-z0-9_]*$') %}
+    Must be a valid lowercase Python identifier.
+    {% endif %}
+
+app_config_class:
+  type: str
+  help: AppConfig subclass name
+  default: "{{ package_name.split('_')|map('capitalize')|join }}Config"
+
+app_verbose_name:
+  type: str
+  help: Human readable name shown in the Django admin
+  default: "{{ project_name }}"
+
+project_description:
+  type: str
+  help: One line summary, used as the PyPI description
+  default: A reusable Django application.
+
+keywords:
+  type: str
+  help: PyPI keywords, comma separated
+  default: >-
+    django, {{ package_name.split("_") | reject("eq", "django") | join(", ") }}
+
+initial_version:
+  type: str
+  help: Version to start at
+  default: "0.1.0"
+
+
+# ---------------------------------------------------------------- authorship
+
+author_name:
+  type: str
+  help: Author name, used in the package metadata and the license
+  default: Vinta Software
+
+author_email:
+  type: str
+  help: Author email
+  default: contact@vinta.com.br
+
+github_org:
+  type: str
+  help: GitHub user or organisation that will own the repository
+  default: vintasoftware
+
+github_repo:
+  type: str
+  help: GitHub repository name
+  default: "{{ distribution_name }}"
+
+license:
+  type: str
+  help: License for the generated project
+  default: MIT
+  choices:
+    MIT: MIT
+    BSD 3-Clause: BSD-3-Clause
+    Proprietary (all rights reserved): Proprietary
+
+copyright_year:
+  type: str
+  help: Year for the copyright notice
+  default: "2026"
+
+
+# ---------------------------------------------------------------- support matrix
+
+python_min:
+  type: str
+  help: Oldest Python version to support
+  default: "3.10"
+  choices: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+django_min:
+  type: str
+  help: Oldest Django version to support
+  default: "5.2"
+  choices: ["5.2", "6.0"]
+
+test_django_main:
+  type: bool
+  help: Also run the suite against Django's main branch (informational, never gating)
+  default: true
+
+publish_to_pypi:
+  type: bool
+  help: Include the trusted-publishing workflow that releases to PyPI
+  default: true
+
+
+# ---------------------------------------------------------------- computed
+#
+# Answered automatically (`when: false`), so they never show up as questions but are
+# available to every template.
+
+# Which interpreters each Django release supports.  The matrices in tox.ini and the CI
+# workflow are built from the intersection with `python_versions`, so an unsupported
+# pair is never emitted.
+python_support:
+  type: json
+  when: false
+  default: '{"5.2": ["3.10", "3.11", "3.12", "3.13"], "6.0": ["3.12", "3.13", "3.14"]}'
+
+all_python_versions:
+  type: json
+  when: false
+  default: '["3.10", "3.11", "3.12", "3.13", "3.14"]'
+
+all_django_versions:
+  type: json
+  when: false
+  default: '["5.2", "6.0"]'
+
+python_versions:
+  type: json
+  when: false
+  default: "{{ all_python_versions[all_python_versions.index(python_min):] | tojson }}"
+
+django_versions:
+  type: json
+  when: false
+  default: "{{ all_django_versions[all_django_versions.index(django_min):] | tojson }}"
+
+# The newest supported interpreter: what Django's main branch and the coverage upload
+# both run on.
+python_latest:
+  type: str
+  when: false
+  default: "{{ python_versions | last }}"
+
+django_latest:
+  type: str
+  when: false
+  default: "{{ django_versions | last }}"
+
+license_classifier:
+  type: str
+  when: false
+  default: >-
+    {{ {"MIT": "License :: OSI Approved :: MIT License",
+        "BSD-3-Clause": "License :: OSI Approved :: BSD License",
+        "Proprietary": "License :: Other/Proprietary License"}[license] }}
+
+license_expression:
+  type: str
+  when: false
+  default: >-
+    {{ {"MIT": "MIT",
+        "BSD-3-Clause": "BSD-3-Clause",
+        "Proprietary": "LicenseRef-Proprietary"}[license] }}
