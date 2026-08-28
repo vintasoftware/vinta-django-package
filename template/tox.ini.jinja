@@ -31,13 +31,19 @@ description = Run the test suite on this interpreter against the pinned Django
 package = wheel
 wheel_build_env = .pkg
 dependency_groups = dev
-deps =
+# Pinning Django belongs in commands_pre rather than in deps: this runner installs
+# the environment with `uv sync`, which is authoritative, so a factor spelled in
+# deps installs nothing and every environment quietly tests whatever uv.lock pins
+# -- the matrix looks like it is varying Django while it is not.
+allowlist_externals = uv
+commands_pre =
 {%- for django in django_versions %}
-    {{ tox_dj(django) }}: django>={{ django }},<{{ dj_next(django) }}
+    {{ tox_dj(django) }}: uv pip install "django>={{ django }},<{{ dj_next(django) }}"
 {%- endfor %}
 {%- if test_django_main %}
-    djmain: https://github.com/django/django/archive/main.tar.gz
+    djmain: uv pip install "https://github.com/django/django/archive/main.tar.gz"
 {%- endif %}
+    python -c "import django; print('Django', django.get_version())"
 {%- if test_django_main %}
 # Django's main branch breaks for reasons that are not this project's fault, so those
 # environments report without failing the run.
