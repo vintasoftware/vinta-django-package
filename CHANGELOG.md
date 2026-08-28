@@ -12,6 +12,23 @@ default - is a breaking change and gets a major bump.
 
 ## [Unreleased]
 
+### Fixed
+
+- The `tox` Django matrix installed nothing. `uv-venv-lock-runner` builds the
+  environment with `uv sync`, which is authoritative, so the `deps` factors were
+  never applied and every environment tested whatever `uv.lock` pinned - a matrix
+  that looked like it was varying Django while it was not. It pins through
+  `commands_pre` now, and prints the version it resolved.
+- The release workflow attached the signed artifacts to the release twice: the
+  Sigstore action does that itself, and the hand-written `gh release upload` after
+  it fails on the second copy - after the upload to PyPI, so the package is out
+  and the release is red. It signs through `release-signing-artifacts` instead.
+- The Sigstore action was pinned to a version from before Sigstore rotated its TUF
+  root, which fails with `root was signed by 0/3 keys`.
+- `uv version --short` can emit colour, which would never equal the tag it is
+  compared against, and the release build ran for a `workflow_dispatch` from a
+  branch whose name is not a version.
+
 ### Added
 
 - Initial release of the template. Generates a reusable Django application packaged
